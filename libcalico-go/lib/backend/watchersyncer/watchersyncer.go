@@ -39,10 +39,6 @@ type ResourceType struct {
 	// UpdateProcessor converts the raw KVPairs returned from the datastore into the appropriate
 	// KVPairs required for the syncer.  This is optional.
 	UpdateProcessor SyncerUpdateProcessor
-
-	// SendDeletesOnConnFail will send deletes for all resources (and therefore do a full resync) if
-	// the connection fails at any point.
-	SendDeletesOnConnFail bool
 }
 
 // Error indicating a problem with a watcher communicating with the backend.
@@ -87,16 +83,15 @@ var _ = WithWatchRetryTimeout
 // New creates a new multiple Watcher-backed api.Syncer.
 func New(client api.Client, resourceTypes []ResourceType, callbacks api.SyncerCallbacks, options ...Option) api.Syncer {
 	rs := &watcherSyncer{
-		watcherCaches:     make([]*watcherCache, len(resourceTypes)),
-		results:           make(chan interface{}, 2000),
-		callbacks:         callbacks,
-		watchRetryTimeout: DefaultWatchRetryTimeout,
+		watcherCaches: make([]*watcherCache, len(resourceTypes)),
+		results:       make(chan interface{}, 2000),
+		callbacks:     callbacks,
 	}
 	for _, o := range options {
 		o(rs)
 	}
 	for i, r := range resourceTypes {
-		rs.watcherCaches[i] = newWatcherCache(client, r, rs.results, rs.watchRetryTimeout)
+		rs.watcherCaches[i] = newWatcherCache(client, r, rs.results)
 	}
 	return rs
 }

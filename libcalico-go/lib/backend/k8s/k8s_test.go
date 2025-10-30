@@ -1022,12 +1022,12 @@ var _ = testutils.E2eDatastoreDescribe("Test Syncer API for Kubernetes backend",
 			latestRevision = kvps.Revision
 		})
 
-		By("Listing all Tiers, using an invalid revision", func() {
+		By("Listing all Tiers, using an invalid currentWatchRevision", func() {
 			_, err := c.List(ctx, model.ResourceListOptions{Kind: apiv3.KindTier}, fmt.Sprintf("1%s", kvp2b.Revision))
 			Expect(err).To(HaveOccurred())
 		})
 
-		By("Listing all Tiers with a valid revision", func() {
+		By("Listing all Tiers with a valid currentWatchRevision", func() {
 			Expect(latestRevision).NotTo(Equal(""))
 			kvps, err := c.List(ctx, model.ResourceListOptions{Kind: apiv3.KindTier}, latestRevision)
 			Expect(err).ToNot(HaveOccurred())
@@ -1211,12 +1211,12 @@ var _ = testutils.E2eDatastoreDescribe("Test Syncer API for Kubernetes backend",
 			latestRevision = kvps.Revision
 		})
 
-		By("Listing all Global Network Policies, using an invalid revision", func() {
+		By("Listing all Global Network Policies, using an invalid currentWatchRevision", func() {
 			_, err := c.List(ctx, model.ResourceListOptions{Kind: apiv3.KindGlobalNetworkPolicy}, fmt.Sprintf("1%s", kvp2b.Revision))
 			Expect(err).To(HaveOccurred())
 		})
 
-		By("Listing all Global Network Policies with a valid revision", func() {
+		By("Listing all Global Network Policies with a valid currentWatchRevision", func() {
 			Expect(latestRevision).NotTo(Equal(""))
 			kvps, err := c.List(ctx, model.ResourceListOptions{Kind: apiv3.KindGlobalNetworkPolicy}, latestRevision)
 			Expect(err).ToNot(HaveOccurred())
@@ -2402,7 +2402,7 @@ var _ = testutils.E2eDatastoreDescribe("Test Syncer API for Kubernetes backend",
 				},
 			},
 		}
-		// Note: assigning back to pod variable in order to pick up revision information. If we don't do that then
+		// Note: assigning back to pod variable in order to pick up currentWatchRevision information. If we don't do that then
 		// the call to UpdateStatus() below would succeed, but it would overwrite our annotation patch.
 		pod, err := c.ClientSet.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 		wepName := "127.0.0.1-k8s-test--syncer--basic--pod-eth0"
@@ -2437,7 +2437,7 @@ var _ = testutils.E2eDatastoreDescribe("Test Syncer API for Kubernetes backend",
 		})
 
 		By("Setting the pod phase to Running", func() {
-			// Try to update the pod using the old revision; this should fail because our patch made it
+			// Try to update the pod using the old currentWatchRevision; this should fail because our patch made it
 			// stale.
 			pod.Status.Phase = k8sapi.PodRunning
 			_, err = c.ClientSet.CoreV1().Pods("default").UpdateStatus(ctx, pod, metav1.UpdateOptions{})
@@ -3039,7 +3039,7 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			defer watch.Stop()
 			ExpectAddedEvent(watch.ResultChan())
 		})
-		It("supports resuming watch from previous revision", func() {
+		It("supports resuming watch from previous currentWatchRevision", func() {
 			watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: model.KindKubernetesAdminNetworkPolicy}, api.WatchOptions{Revision: ""})
 			Expect(err).NotTo(HaveOccurred())
 			event := ExpectAddedEvent(watch.ResultChan())
@@ -3049,7 +3049,7 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			Expect(err).NotTo(HaveOccurred())
 			watch.Stop()
 		})
-		It("should handle a list for many network policies with a revision", func() {
+		It("should handle a list for many network policies with a currentWatchRevision", func() {
 			for i := 3; i < 1000; i++ {
 				createTestAdminNetworkPolicy(fmt.Sprintf("test-admin-net-policy-%d", i))
 			}
@@ -3088,7 +3088,7 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			defer watch.Stop()
 			ExpectAddedEvent(watch.ResultChan())
 		})
-		It("supports resuming watch from previous revision", func() {
+		It("supports resuming watch from previous currentWatchRevision", func() {
 			watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: model.KindKubernetesNetworkPolicy}, api.WatchOptions{Revision: ""})
 			Expect(err).NotTo(HaveOccurred())
 			event := ExpectAddedEvent(watch.ResultChan())
@@ -3098,7 +3098,7 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			Expect(err).NotTo(HaveOccurred())
 			watch.Stop()
 		})
-		It("should handle a list for many network policies with a revision", func() {
+		It("should handle a list for many network policies with a currentWatchRevision", func() {
 			for i := 3; i < 1000; i++ {
 				createTestNetworkPolicy(fmt.Sprintf("test-net-policy-%d", i))
 			}
@@ -3244,14 +3244,14 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			deleteAllAdminNetworkPolicies()
 		})
 
-		It("supports resuming watch from previous revision (calico)", func() {
+		It("supports resuming watch from previous currentWatchRevision (calico)", func() {
 			// Should only return Calico NPs
 			l, err := c.List(ctx, model.ResourceListOptions{Kind: apiv3.KindNetworkPolicy}, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(l.KVPairs).To(HaveLen(2))
 
 			// Now, modify all the policies.  It's important to do this with
-			// multiple policies of each type, because we want to test that revision
+			// multiple policies of each type, because we want to test that currentWatchRevision
 			// numbers come out in a sensible order. We're going to resume the watch
 			// from the "last" event to come out of the watch, and if it doesn't
 			// really represent the latest update, when we resume watching, we
@@ -3272,15 +3272,15 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			}
 			Expect(found).To(Equal(2))
 
-			log.WithField("revision", l.Revision).Info("[TEST] first watch")
+			log.WithField("currentWatchRevision", l.Revision).Info("[TEST] first watch")
 			watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: apiv3.KindNetworkPolicy}, api.WatchOptions{Revision: l.Revision})
 			Expect(err).NotTo(HaveOccurred())
 
 			// We should see 2 events for Calico NPs.
 			event := ExpectModifiedEvent(watch.ResultChan())
-			log.WithField("revision", event.New.Revision).Info("[TEST] first event")
+			log.WithField("currentWatchRevision", event.New.Revision).Info("[TEST] first event")
 			event = ExpectModifiedEvent(watch.ResultChan())
-			log.WithField("revision", event.New.Revision).Info("[TEST] second event")
+			log.WithField("currentWatchRevision", event.New.Revision).Info("[TEST] second event")
 
 			// There should be no more events
 			Expect(watch.ResultChan()).ToNot(Receive())
@@ -3291,8 +3291,8 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			_, err = c.Update(ctx, kvp1or2)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Resume watching at the revision of the event we got
-			log.WithField("revision", event.New.Revision).Info("second watch")
+			// Resume watching at the currentWatchRevision of the event we got
+			log.WithField("currentWatchRevision", event.New.Revision).Info("second watch")
 			watch, err = c.Watch(ctx, model.ResourceListOptions{Kind: apiv3.KindNetworkPolicy}, api.WatchOptions{Revision: event.New.Revision})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -3304,14 +3304,14 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			watch.Stop()
 		})
 
-		It("supports resuming watch from previous revision (k8s)", func() {
+		It("supports resuming watch from previous currentWatchRevision (k8s)", func() {
 			// Should only return k8s NPs
 			l, err := c.List(ctx, model.ResourceListOptions{Kind: model.KindKubernetesNetworkPolicy}, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(l.KVPairs).To(HaveLen(2))
 
 			// Now, modify all the policies.  It's important to do this with
-			// multiple policies of each type, because we want to test that revision
+			// multiple policies of each type, because we want to test that currentWatchRevision
 			// numbers come out in a sensible order. We're going to resume the watch
 			// from the "last" event to come out of the watch, and if it doesn't
 			// really represent the latest update, when we resume watching, we
@@ -3333,14 +3333,14 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			}
 			Expect(found).To(Equal(2))
 
-			log.WithField("revision", l.Revision).Info("[TEST] first watch")
+			log.WithField("currentWatchRevision", l.Revision).Info("[TEST] first watch")
 			watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: model.KindKubernetesNetworkPolicy}, api.WatchOptions{Revision: l.Revision})
 			Expect(err).NotTo(HaveOccurred())
 
 			event := ExpectModifiedEvent(watch.ResultChan())
-			log.WithField("revision", event.New.Revision).Info("[TEST] first k8s event")
+			log.WithField("currentWatchRevision", event.New.Revision).Info("[TEST] first k8s event")
 			event = ExpectModifiedEvent(watch.ResultChan())
-			log.WithField("revision", event.New.Revision).Info("[TEST] second k8s event")
+			log.WithField("currentWatchRevision", event.New.Revision).Info("[TEST] second k8s event")
 
 			// There should be no more events
 			Expect(watch.ResultChan()).ToNot(Receive())
@@ -3357,8 +3357,8 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 				break
 			}
 
-			// Resume watching at the revision of the event we got
-			log.WithField("revision", event.New.Revision).Info("second watch")
+			// Resume watching at the currentWatchRevision of the event we got
+			log.WithField("currentWatchRevision", event.New.Revision).Info("second watch")
 			watch, err = c.Watch(ctx, model.ResourceListOptions{Kind: model.KindKubernetesNetworkPolicy}, api.WatchOptions{Revision: event.New.Revision})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -3370,14 +3370,14 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			watch.Stop()
 		})
 
-		It("supports resuming watch from previous revision k8s admin network policy", func() {
+		It("supports resuming watch from previous currentWatchRevision k8s admin network policy", func() {
 			// Should only return k8s ANPs
 			l, err := c.List(ctx, model.ResourceListOptions{Kind: model.KindKubernetesAdminNetworkPolicy}, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(l.KVPairs).To(HaveLen(2))
 
 			// Now, modify all the policies.  It's important to do this with
-			// multiple policies of each type, because we want to test that revision
+			// multiple policies of each type, because we want to test that currentWatchRevision
 			// numbers come out in a sensible order. We're going to resume the watch
 			// from the "last" event to come out of the watch, and if it doesn't
 			// really represent the latest update, when we resume watching, we
@@ -3399,14 +3399,14 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			}
 			Expect(found).To(Equal(2))
 
-			log.WithField("revision", l.Revision).Info("[TEST] first watch")
+			log.WithField("currentWatchRevision", l.Revision).Info("[TEST] first watch")
 			watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: model.KindKubernetesAdminNetworkPolicy}, api.WatchOptions{Revision: l.Revision})
 			Expect(err).NotTo(HaveOccurred())
 
 			event := ExpectModifiedEvent(watch.ResultChan())
-			log.WithField("revision", event.New.Revision).Info("[TEST] first k8s event")
+			log.WithField("currentWatchRevision", event.New.Revision).Info("[TEST] first k8s event")
 			event = ExpectModifiedEvent(watch.ResultChan())
-			log.WithField("revision", event.New.Revision).Info("[TEST] second k8s event")
+			log.WithField("currentWatchRevision", event.New.Revision).Info("[TEST] second k8s event")
 
 			// There should be no more events
 			Expect(watch.ResultChan()).ToNot(Receive())
@@ -3423,8 +3423,8 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 				break
 			}
 
-			// Resume watching at the revision of the event we got
-			log.WithField("revision", event.New.Revision).Info("second watch")
+			// Resume watching at the currentWatchRevision of the event we got
+			log.WithField("currentWatchRevision", event.New.Revision).Info("second watch")
 			watch, err = c.Watch(ctx, model.ResourceListOptions{Kind: model.KindKubernetesAdminNetworkPolicy}, api.WatchOptions{Revision: event.New.Revision})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -3446,8 +3446,8 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			for i := 0; i < 2; i++ {
 				revision := l.KVPairs[i].Revision
 				log.WithFields(log.Fields{
-					"revision": revision,
-					"key":      l.KVPairs[i].Key.String(),
+					"currentWatchRevision": revision,
+					"key":                  l.KVPairs[i].Key.String(),
 				}).Info("[Test] starting watch")
 				watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: apiv3.KindNetworkPolicy}, api.WatchOptions{Revision: revision})
 				Expect(err).ToNot(HaveOccurred())
@@ -3468,8 +3468,8 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			for i := 0; i < 2; i++ {
 				revision := l.KVPairs[i].Revision
 				log.WithFields(log.Fields{
-					"revision": revision,
-					"key":      l.KVPairs[i].Key.String(),
+					"currentWatchRevision": revision,
+					"key":                  l.KVPairs[i].Key.String(),
 				}).Info("[Test] starting watch")
 				watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: apiv3.KindNetworkPolicy}, api.WatchOptions{Revision: revision})
 				Expect(err).ToNot(HaveOccurred())
@@ -3490,8 +3490,8 @@ var _ = testutils.E2eDatastoreDescribe("Test Watch support", testutils.Datastore
 			for i := 0; i < 2; i++ {
 				revision := l.KVPairs[i].Revision
 				log.WithFields(log.Fields{
-					"revision": revision,
-					"key":      l.KVPairs[i].Key.String(),
+					"currentWatchRevision": revision,
+					"key":                  l.KVPairs[i].Key.String(),
 				}).Info("[Test] starting watch")
 				watch, err := c.Watch(ctx, model.ResourceListOptions{Kind: apiv3.KindGlobalNetworkPolicy}, api.WatchOptions{Revision: revision})
 				Expect(err).ToNot(HaveOccurred())

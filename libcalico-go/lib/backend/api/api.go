@@ -114,6 +114,11 @@ type Client interface {
 	// input list options.
 	Watch(ctx context.Context, list model.ListInterface, options WatchOptions) (WatchInterface, error)
 
+	// ListAndWatch performs list and watch operations, returning a channel of watch events.
+	// The implementation handles reconnection, resync, and error recovery.
+	// The returned channel will be closed when the context is cancelled.
+	ListAndWatch(ctx context.Context, list model.ListInterface) (<-chan WatchEvent, error)
+
 	// EnsureInitialized ensures that the backend is initialized
 	// any ready to be used.
 	EnsureInitialized() error
@@ -236,6 +241,7 @@ const (
 	WatchDeleted  WatchEventType = "DELETED"
 	WatchError    WatchEventType = "ERROR"
 	WatchBookmark WatchEventType = "BOOKMARK"
+	WatchInSync   WatchEventType = "INSYNC"
 )
 
 // Event represents a single event to a watched resource.
