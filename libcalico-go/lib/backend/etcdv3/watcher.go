@@ -52,6 +52,90 @@ func (c *etcdV3Client) Watch(cxt context.Context, l model.ListInterface, options
 	return wc, nil
 }
 
+// ListAndWatch implements the list-and-watch pattern for etcd resources.
+// For etcd, this uses the existing watcher implementation which already handles
+// both list and watch operations internally. Unlike kubernetes, etcd doesn't need
+// separate handling for bookmarks, CRD installation, or WatchList fallbacks.
+func (c *etcdV3Client) ListAndWatch(ctx context.Context, l model.ListInterface, options api.WatchOptions, handler api.EventHandler) error {
+	log.Debug("Starting etcd ListAndWatch")
+
+	var watcher api.WatchInterface
+	currentRevision := "0"
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if currentRevision == "0" {
+			kvps, err := c.List(ctx, l, "")
+			if err != nil {
+				continue
+			}
+			// Send updates for each of the resources we listed - this will revalidate entries in
+			// the oldResources map.
+			for _, kvp := range kvps.KVPairs {
+				handler.OnAdd(kvp)
+			}
+			handler.OnSync()
+
+			currentRevision = kvps.Revision
+
+			watcher, err = c.Watch(ctx, l, api.WatchOptions{
+				Revision: currentRevision,
+			})
+			if err != nil {
+				continue
+			}
+		}
+
+		// Process events from the watcher
+		log.Debug("Processing watcher events")
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug("Context cancelled, stopping ListAndWatch")
+				return ctx.Err()
+
+			case event, ok := <-watcher.ResultChan():
+				if !ok {
+					log.Debug("Watch channel closed")
+					return nil
+				}
+
+				// Handle the event based on type
+				switch event.Type {
+				case api.WatchAdded:
+					// For etcd, WatchAdded is used for initial list results
+					// and for actual added events during watch
+					if event.New != nil {
+						handler.OnAdd(event.New)
+					}
+
+				case api.WatchModified:
+					if event.New != nil {
+						handler.OnUpdate(event.New)
+					}
+
+				case api.WatchDeleted:
+					if event.Old != nil {
+						handler.OnDelete(event.Old)
+					}
+
+				case api.WatchError:
+					if event.Error != nil {
+						return event.Error
+					}
+
+				default:
+					log.WithField("eventType", event.Type).Warn("Unexpected watch event type")
+				}
+			}
+		}
+	}
+}
+
 // watcher implements watch.Interface.
 type watcher struct {
 	client     *etcdV3Client
@@ -90,29 +174,6 @@ func (wc *watcher) watchLoop() {
 	key, opts := calculateListKeyAndOptions(logCxt, wc.list)
 
 	log.Debug("Starting watcher.watchLoop")
-	if wc.initialRev == 0 {
-		// No initial revision supplied, so perform a list of current configuration
-		// which will also get the current revision we will start our watch from.
-		var kvps *model.KVPairList
-		var err error
-		if kvps, err = wc.listCurrent(); err != nil {
-			log.Errorf("failed to list current with latest state: %v", err)
-			// Error considered as terminating error, hence terminate watcher.
-			wc.sendError(err)
-			return
-		}
-
-		// If we're handling profiles, filter out the default-allow profile.
-		if len(kvps.KVPairs) > 0 && (key == profilesKey || key == defaultAllowProfileKey) {
-			wc.removeDefaultAllowProfile(kvps)
-		}
-
-		// We are sending an initial sync of entries to the watcher to provide current
-		// state.  To the perspective of the watcher, these are added entries, so set the
-		// event type to WatchAdded.
-		log.WithField("NumEntries", len(kvps.KVPairs)).Debug("Sending create events for each existing entry")
-		wc.sendAddedEvents(kvps)
-	}
 
 	opts = append(opts, clientv3.WithRev(wc.initialRev+1), clientv3.WithPrevKV())
 	logCxt = logCxt.WithFields(log.Fields{
@@ -160,31 +221,6 @@ func (wc *watcher) listCurrent() (*model.KVPairList, error) {
 	}
 
 	return list, nil
-}
-
-// removeDefaultAllowProfile filters out the default-allow profile out of the
-// given kvps list.
-func (wc *watcher) removeDefaultAllowProfile(list *model.KVPairList) {
-	log.Debugf("Filtering the default-allow profile out of the kvps list")
-	n := 0
-	s := list.KVPairs
-	for _, kvp := range s {
-		if kvp.Key != defaultAllowProfileResourceKey {
-			s[n] = kvp
-			n++
-		}
-	}
-	list.KVPairs = s[:n]
-}
-
-// sendAddedEvents sends an ADDED event for each entry in the kvp list.
-func (wc *watcher) sendAddedEvents(list *model.KVPairList) {
-	for _, kv := range list.KVPairs {
-		wc.sendEvent(&api.WatchEvent{
-			Type: api.WatchAdded,
-			New:  kv,
-		})
-	}
 }
 
 // terminateWatcher terminates the resources associated with the watcher.

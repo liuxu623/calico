@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"sync"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/projectcalico/calico/libcalico-go/lib/backend/model"
 )
 
@@ -114,6 +116,21 @@ type Client interface {
 	// input list options.
 	Watch(ctx context.Context, list model.ListInterface, options WatchOptions) (WatchInterface, error)
 
+	// ListAndWatch provides a unified interface for listing and watching resources.
+	// This method handles backend-specific logic for resync and watch operations,
+	// including error handling, retry logic, and synchronization state tracking.
+	// The caller provides a callback to process updates, and the implementation
+	// ensures proper ordering and synchronization of events.
+	//
+	// The callback receives events through the EventHandler interface, which includes:
+	// - OnAdd/OnUpdate/OnDelete: For resource changes
+	// - OnSync: Called when the initial list is complete and the watcher is in sync
+	// - OnError: For error handling
+	//
+	// This method should be used instead of separate List + Watch calls when possible,
+	// as it handles backend-specific optimizations like WatchList and bookmark handling.
+	ListAndWatch(ctx context.Context, list model.ListInterface, options WatchOptions, handler EventHandler) error
+
 	// EnsureInitialized ensures that the backend is initialized
 	// any ready to be used.
 	EnsureInitialized() error
@@ -137,8 +154,26 @@ type StatusClient interface {
 }
 
 type WatchOptions struct {
-	Revision            string
-	AllowWatchBookmarks bool
+	Revision             string
+	AllowWatchBookmarks  bool
+	SendInitialEvents    *bool
+	ResourceVersionMatch metav1.ResourceVersionMatch
+}
+
+// EventHandler defines the interface for processing list-watch events.
+// Implementations should handle add, update, delete, sync, and error events.
+type EventHandler interface {
+	// OnAdd is called when a new resource is added.
+	OnAdd(kvp *model.KVPair)
+
+	// OnUpdate is called when an existing resource is modified.
+	OnUpdate(kvp *model.KVPair)
+
+	// OnDelete is called when a resource is deleted.
+	OnDelete(kvp *model.KVPair)
+
+	// OnSync is called when the initial list is complete and the watcher is in sync.
+	OnSync()
 }
 
 type Syncer interface {
